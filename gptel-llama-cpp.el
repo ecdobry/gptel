@@ -32,15 +32,18 @@
 ;;   :host "localhost:8080"
 ;;   :stream t)
 ;;
-;; The backend will automatically fetch available models from the server.
-;; You can refresh the model list with `gptel-llama-cpp-refresh-models'.
+;; Models are fetched lazily when the user opens the gptel-menu, so the
+;; backend can be created even when the server is not running.  You can
+;; refresh the model list with `gptel-llama-cpp-refresh-models' or by
+;; pressing "R" in the gptel-menu when a llama-cpp backend is selected.
 
 ;;; Code:
 (require 'gptel)
 (require 'cl-lib)
 
 (eval-when-compile
-  (require 'cl-generic))
+  (require 'cl-generic)
+  (require 'transient))
 
 (declare-function gptel--process-models "gptel-openai")
 (declare-function gptel--json-read "gptel-openai")
@@ -62,7 +65,9 @@
 Inherits from `gptel-openai' for OpenAI-compatible request/response
 handling, with additional support for dynamic model discovery."
   (models-endpoint "/v1/models"
-                   :documentation "API endpoint for fetching available models."))
+                   :documentation "API endpoint for fetching available models.")
+  (models-fetched-p nil
+                    :documentation "Whether models have been fetched from the server."))
 
 (defun gptel-llama-cpp--fetch-models (backend &optional callback)
   "Fetch available models from llama.cpp server for BACKEND.
@@ -138,6 +143,26 @@ description and capabilities where available."
      finally (setq models result))
     models))
 
+(defun gptel-llama-cpp--ensure-models (backend)
+  "Ensure models are fetched for llama-cpp BACKEND.
+
+If models have already been fetched or were provided at backend
+creation, this is a no-op.  Otherwise, fetch models synchronously.
+
+Returns t if models were already available, nil if fetch was attempted."
+  (if (gptel-llama-cpp-models-fetched-p backend)
+      t
+    (message "Fetching models from %s..." (gptel-backend-host backend))
+    (condition-case err
+        (when-let* ((models (gptel-llama-cpp--fetch-models backend)))
+          (setf (gptel-backend-models backend) models)
+          (setf (gptel-llama-cpp-models-fetched-p backend) t)
+          (message "Fetched %d models from %s"
+                   (length models) (gptel-backend-name backend)))
+      (error
+       (message "gptel-llama-cpp: Could not fetch models: %S" err)))
+    nil))
+
 ;;;###autoload
 (defun gptel-llama-cpp-refresh-models (backend)
   "Refresh the list of available models for llama.cpp BACKEND.
@@ -155,6 +180,7 @@ multiple llama.cpp backends registered."
      (if models
          (progn
            (setf (gptel-backend-models backend) models)
+           (setf (gptel-llama-cpp-models-fetched-p backend) t)
            (message "Fetched %d models from %s"
                     (length models) (gptel-backend-name backend)))
        (message "No models returned from %s" (gptel-backend-name backend))))))
@@ -175,6 +201,21 @@ multiple llama.cpp backends registered."
                                    (mapcar #'car llama-cpp-backends)
                                    nil t)))
         (alist-get name llama-cpp-backends nil nil #'equal))))))
+
+;; Transient menu integration
+(declare-function transient-define-suffix "transient")
+(defvar gptel-backend)
+
+(transient-define-suffix gptel-llama-cpp--suffix-refresh-models ()
+  "Refresh models from llama.cpp server."
+  :transient t
+  :key "R"
+  :if (lambda () (and (boundp 'gptel-backend)
+                      gptel-backend
+                      (gptel-llama-cpp-p gptel-backend)))
+  :description "Refresh models"
+  (interactive)
+  (gptel-llama-cpp-refresh-models gptel-backend))
 
 ;;;###autoload
 (cl-defun gptel-make-llama-cpp
@@ -261,21 +302,8 @@ To specify models manually instead:
              llava-1.6-7b))"
   (declare (indent 1))
   (require 'gptel-openai)
-  (let* ((fetched-models
-          (unless models
-            ;; Try to fetch models, but don't fail if server is unavailable
-            (condition-case nil
-                (gptel-llama-cpp--fetch-models
-                 (gptel--make-llama-cpp
-                  :name name
-                  :host host
-                  :protocol protocol
-                  :models-endpoint models-endpoint))
-              (error
-               (message "gptel-llama-cpp: Could not fetch models from %s. Use `gptel-llama-cpp-refresh-models' later."
-                        host)
-               nil))))
-         (final-models (gptel--process-models (or models fetched-models '(default))))
+  (let* ((models-provided (not (null models)))
+         (final-models (gptel--process-models (or models '(default))))
          (backend (gptel--make-llama-cpp
                    :curl-args curl-args
                    :name name
@@ -286,6 +314,7 @@ To specify models manually instead:
                    :protocol protocol
                    :endpoint endpoint
                    :models-endpoint models-endpoint
+                   :models-fetched-p models-provided
                    :stream stream
                    :request-params request-params
                    :url (concat (or protocol "http") "://" host endpoint))))

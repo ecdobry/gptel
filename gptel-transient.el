@@ -822,6 +822,12 @@ Also format the value of OBJ in the transient menu."
                (gptel--format-preset-string))))
     (gptel--infix-variable-scope)
     (gptel--infix-provider)
+    ;; llama.cpp model refresh (only shown for llama-cpp backends)
+    ("R" "Refresh models" gptel-llama-cpp--suffix-refresh-models
+     :if (lambda () (and (fboundp 'gptel-llama-cpp-p)
+                         gptel-backend
+                         (gptel-llama-cpp-p gptel-backend)))
+     :transient t)
     (gptel--infix-max-tokens)
     (gptel--infix-num-messages-to-send
      :if (lambda () (and gptel-expert-commands
@@ -1264,6 +1270,13 @@ responses."
   :reader (lambda (prompt &rest _)
             (cl-loop
              for (name . backend) in gptel--known-backends
+             ;; Trigger lazy model fetch for llama-cpp backends
+             do (when (and (fboundp 'gptel-llama-cpp-p)
+                           (gptel-llama-cpp-p backend)
+                           (fboundp 'gptel-llama-cpp--ensure-models)
+                           (fboundp 'gptel-llama-cpp-models-fetched-p)
+                           (not (gptel-llama-cpp-models-fetched-p backend)))
+                  (gptel-llama-cpp--ensure-models backend))
              nconc (cl-loop for model in (gptel-backend-models backend)
                             collect (list (concat name ":" (gptel--model-name model))
                                           backend model))
