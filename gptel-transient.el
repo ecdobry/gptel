@@ -828,6 +828,12 @@ Also format the value of OBJ in the transient menu."
                          gptel-backend
                          (gptel-llama-cpp-p gptel-backend)))
      :transient t)
+    ;; OpenRouter model refresh (only shown for openrouter backends)
+    ("R" "Refresh models" gptel-openrouter--suffix-refresh-models
+     :if (lambda () (and (fboundp 'gptel-openrouter-p)
+                         gptel-backend
+                         (gptel-openrouter-p gptel-backend)))
+     :transient t)
     (gptel--infix-max-tokens)
     (gptel--infix-num-messages-to-send
      :if (lambda () (and gptel-expert-commands
