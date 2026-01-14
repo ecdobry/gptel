@@ -222,19 +222,7 @@ multiple OpenRouter backends registered."
         (alist-get name openrouter-backends nil nil #'equal))))))
 
 ;; Transient menu integration
-(declare-function transient-define-suffix "transient")
 (defvar gptel-backend)
-
-(transient-define-suffix gptel-openrouter--suffix-refresh-models ()
-  "Refresh models from OpenRouter server."
-  :transient t
-  :key "R"
-  :if (lambda () (and (boundp 'gptel-backend)
-                      gptel-backend
-                      (gptel-openrouter-p gptel-backend)))
-  :description "Refresh models"
-  (interactive)
-  (gptel-openrouter-refresh-models gptel-backend))
 
 ;;;###autoload
 (cl-defun gptel-make-openrouter
