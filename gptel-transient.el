@@ -1110,7 +1110,8 @@ only (\"oneshot\")."
     (gptel--infix-variable-scope)
     (gptel--infix-use-tools)
     (gptel--infix-confirm-tool-calls)
-    (gptel--infix-include-tool-results)]
+    (gptel--infix-include-tool-results)
+    (gptel--infix-include-tool-calls)]
    [""
     ("RET" "Confirm selection"
      (lambda (tools)
@@ -1613,6 +1614,34 @@ This sets the variable `gptel-include-tool-results', which see."
               (cdr (assoc pref choices)))))
 
 
+(transient-define-infix gptel--infix-include-tool-calls ()
+  "Whether tool calls should be included in the response.
+
+This is a three-way toggle between these behaviors:
+
+- All tool calls are included.
+- No tool calls are included.
+- Decided per-tool, according to the value of the tool spec's
+  :include slot.
+
+This sets the variable `gptel-include-tool-calls', which see."
+  :key "-I"
+  :description "Include calls     "
+  :class 'gptel-lisp-variable
+  :variable 'gptel-include-tool-calls
+  :set-value #'gptel--set-with-scope
+  :display-nil "never"
+  :display-map '((nil . "never")
+                 (t   . "always")
+                 (auto . "auto"))
+  :prompt "Include tool calls in LLM response? "
+  :reader (lambda (prompt &rest _)
+            (let* ((choices '(("never"   . nil)
+                              ("always" . t)
+                              ("tool decides" . auto)))
+                   (pref (completing-read prompt choices nil t)))
+              (cdr (assoc pref choices)))))
+
 ;; * Transient Suffixes
 
 ;; ** Suffix to send prompt

@@ -1292,6 +1292,20 @@ included only when the corresponding tool spec has a non-nil
           (const :tag "Always" t)
           (const :tag "Never" nil)))
 
+(defcustom gptel-include-tool-calls nil
+  "Whether tool calls should be included in the buffer.
+
+If set to t or nil, tool calls are always or never
+included in the LLM response, respectively.
+
+If set to the symbol auto, a tool call is included only when
+the corresponding tool spec has a non-nil :include slot.
+See `gptel-make-tool'."
+  :type '(choice
+          (const :tag "Tool decides" auto)
+          (const :tag "Always" t)
+          (const :tag "Never" nil)))
+
 (defcustom gptel-tools nil
   "A list of tools to include with gptel requests.
 
@@ -1686,7 +1700,7 @@ MACHINE is an instance of `gptel-fsm'"
               (ntools (length tool-use))
               (tool-idx 0))
     (with-current-buffer (plist-get info :buffer)
-      (let ((result-alist) (pending-calls))
+      (let ((result-alist) (pending-calls) (auto-run-calls))
         (mapc                           ; Construct function calls
          (lambda (tool-call)
            (letrec ((args (plist-get tool-call :args))
@@ -1731,7 +1745,8 @@ MACHINE is an instance of `gptel-fsm'"
                               (or (not (functionp confirm)) (apply confirm arg-values)))))
                    (push (list tool-spec arg-values process-tool-result)
                          pending-calls)
-                 ;; If not, run the tool
+                 ;; If not, collect for display then run the tool
+                 (push (list tool-spec arg-values process-tool-result) auto-run-calls)
                  (if (gptel-tool-async tool-spec)
                      (apply (gptel-tool-function tool-spec)
                             process-tool-result arg-values)
@@ -1741,6 +1756,10 @@ MACHINE is an instance of `gptel-fsm'"
                             (error (mapconcat #'gptel--to-string errdata " ")))))
                      (funcall process-tool-result result)))))))
          tool-use)
+        ;; Display auto-run tool calls (for gptel-include-tool-calls)
+        (when auto-run-calls
+          (funcall (plist-get info :callback)
+                   (cons 'tool-call-auto (nreverse auto-run-calls)) info))
         (when pending-calls
           (plist-put info :tool-pending t)
           (funcall (plist-get info :callback)

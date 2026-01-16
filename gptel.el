@@ -1486,6 +1486,8 @@ Optional RAW disables text properties and transformation."
                      (gptel-markdown-cycle-block)))))))))
       (`(tool-call . ,tool-calls)
        (gptel--display-tool-calls tool-calls info))
+      (`(tool-call-auto . ,tool-calls)
+       (gptel--display-tool-calls-text tool-calls info))
       (`(tool-result . ,tool-results)
        (gptel--display-tool-results tool-results info)))))
 
@@ -1528,6 +1530,8 @@ Optional RAW disables text properties and transformation."
      (gptel--display-reasoning-stream text info))
     (`(tool-call . ,tool-calls)
      (gptel--display-tool-calls tool-calls info))
+    (`(tool-call-auto . ,tool-calls)
+     (gptel--display-tool-calls-text tool-calls info))
     (`(tool-result . ,tool-results)
      (gptel--display-tool-results tool-results info)
      ;; Adjust for tool calls inside reasoning blocks
@@ -1693,6 +1697,8 @@ for tool call specifications to be confirmed.  INFO contains the
 state of the request.  To prompt for tool call confirmation, use
 either an overlay in the request buffer or the minibuffer (if
 USE-MINIBUFFER is non-nil)."
+  ;; Insert persistent tool call text if configured
+  (gptel--display-tool-calls-text tool-calls info)
   (let* ((start-marker (plist-get info :position))
          (tracking-marker (plist-get info :tracking-marker)))
     ;; pending tool calls look like ((tool callback args) ...)
@@ -1791,6 +1797,85 @@ USE-MINIBUFFER is non-nil)."
                        (concat "Tool call(s) requested: " actions-string))
           (overlay-put ov 'keymap gptel-tool-call-actions-map)
           prompt-ov)))))
+
+(defun gptel--display-tool-calls-text (tool-calls info)
+  "Insert TOOL-CALLS into buffer as persistent text.
+
+TOOL-CALLS is
+
+ ((tool args callback) ...)
+
+for tool call specifications.  INFO contains the state of the request."
+  (let* ((start-marker (plist-get info :position))
+         (tool-marker (plist-get info :tool-marker))
+         (tracking-marker (plist-get info :tracking-marker)))
+    (with-current-buffer (marker-buffer start-marker)
+      (when gptel-include-tool-calls
+        (cl-loop
+         for (tool args _callback) in tool-calls
+         with include-names =
+         (mapcar #'gptel-tool-name
+                 (cl-remove-if-not #'gptel-tool-include (plist-get info :tools)))
+         if (or (eq gptel-include-tool-calls t)
+                (member (gptel-tool-name tool) include-names))
+         do (funcall
+             (plist-get info :callback)
+             (let* ((name (gptel-tool-name tool))
+                    (separator
+                     (cond ((not tracking-marker)
+                            (and gptel-mode
+                                 (not (string-suffix-p
+                                       "\n" (gptel-response-prefix-string)))
+                                 "\n"))
+                           ((not (and tool-marker
+                                      (= tracking-marker tool-marker)))
+                            gptel-response-separator)))
+                    (tool-use
+                     (cl-find-if
+                      (lambda (tu) (equal (plist-get tu :name) name))
+                      (plist-get info :tool-use)))
+                    (id (plist-get tool-use :id))
+                    (display-call (format "(%s %s)" name
+                                          (string-trim (prin1-to-string args) "(" ")")))
+                    (call (prin1-to-string `(:name ,name :args ,args)))
+                    (truncated-call
+                     (string-replace "\n" " "
+                                     (truncate-string-to-width
+                                      display-call
+                                      (floor (* (window-width) 0.6)) 0 nil " ...)"))))
+               (if (derived-mode-p 'org-mode)
+                   (concat
+                    separator
+                    "#+begin_tool_call "
+                    truncated-call
+                    (propertize
+                     (concat "\n" call)
+                     'gptel `(tool-call . ,id))
+                    "\n#+end_tool_call\n")
+                 (concat
+                  separator
+                  (propertize (format "``` tool_call %s" truncated-call)
+                              'gptel 'ignore 'keymap gptel--markdown-block-map)
+                  (propertize
+                   (concat "\n" call)
+                   'gptel `(tool-call . ,id))
+                  (propertize "\n```\n" 'gptel 'ignore
+                              'keymap gptel--markdown-block-map))))
+             info
+             'raw)
+         (unless tracking-marker
+           (setq tracking-marker (plist-get info :tracking-marker)))
+         (if tool-marker
+             (move-marker tool-marker tracking-marker)
+           (setq tool-marker (copy-marker tracking-marker nil))
+           (plist-put info :tool-marker tool-marker))
+         (ignore-errors
+           (save-excursion
+             (goto-char tracking-marker)
+             (forward-line -1)
+             (if (derived-mode-p 'org-mode)
+                 (when (looking-at-p "^#\\+end_tool_call") (org-cycle))
+               (when (looking-at-p "^```") (gptel-markdown-cycle-block))))))))))
 
 (defun gptel--display-tool-results (tool-results info)
   "Insert TOOL-RESULTS into buffer.
