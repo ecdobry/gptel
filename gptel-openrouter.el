@@ -56,6 +56,7 @@
 
 ;; Inherit from gptel-openai for OpenAI-compatible API handling
 (declare-function gptel--make-openai "gptel-openai")
+(declare-function gptel--request-data "gptel-openai")
 
 ;;; OpenRouter backend
 
@@ -74,7 +75,21 @@ optional tracking headers."
   (referer nil
            :documentation "HTTP-Referer header for OpenRouter tracking/leaderboard.")
   (title nil
-         :documentation "X-Title header for OpenRouter tracking/leaderboard."))
+         :documentation "X-Title header for OpenRouter tracking/leaderboard.")
+  (provider nil
+            :documentation "Provider routing preferences plist.
+Supports keys :order (list of provider names), :allow_fallbacks (boolean),
+:require (list like [\"native\"]), :ignore (list of providers to exclude),
+and :quantizations (list of allowed quantizations)."))
+
+(cl-defmethod gptel--request-data :around ((backend gptel-openrouter) prompts)
+  "Add provider routing preferences to OpenRouter requests.
+Calls the parent gptel-openai method and adds the :provider key
+if configured on BACKEND."
+  (let ((request-data (cl-call-next-method backend prompts)))
+    (when-let* ((provider (gptel-openrouter-provider backend)))
+      (plist-put request-data :provider provider))
+    request-data))
 
 (defun gptel-openrouter--fetch-models (backend &optional callback)
   "Fetch available models from OpenRouter for BACKEND.
@@ -235,6 +250,7 @@ multiple OpenRouter backends registered."
           (stream nil)
           referer
           title
+          provider
           models)
   "Register an OpenRouter backend for gptel with NAME.
 
@@ -286,6 +302,14 @@ usage to your application.
 TITLE (optional) is a string to send as X-Title header for
 OpenRouter tracking.  This is displayed on the OpenRouter dashboard.
 
+PROVIDER (optional) is a plist of provider routing preferences.
+Supported keys are:
+- :order - list of provider names to prefer (e.g., [\"Anthropic\" \"Google\"])
+- :allow_fallbacks - boolean, whether to fallback to other providers
+- :require - list of requirements (e.g., [\"native\"] for native implementations)
+- :ignore - list of provider names to exclude
+- :quantizations - list of allowed quantizations (e.g., [\"fp16\" \"bf16\"])
+
 HEADER (optional) is for additional headers to send with each
 request.  It should be an alist or a function that returns an
 alist.  Note that OpenRouter-specific headers (Authorization,
@@ -304,9 +328,11 @@ Example:
    :key \\='gptel-openrouter-api-key
    :stream t
    :referer \"https://mysite.com\"
-   :title \"My Application\")
+   :title \"My Application\"
+   :provider \\='(:order [\"Anthropic\"] :require [\"native\"]))
 
-The above creates a backend that will automatically fetch models."
+The above creates a backend that will automatically fetch models
+and route requests to Anthropic's native implementation when available."
   (declare (indent 1))
   (require 'gptel-openai)
   (let* ((models-provided (not (null models)))
@@ -336,6 +362,7 @@ The above creates a backend that will automatically fetch models."
                    :models-fetched-p models-provided
                    :referer referer
                    :title title
+                   :provider provider
                    :stream stream
                    :request-params request-params
                    :url (concat (or protocol "https") "://" host endpoint))))

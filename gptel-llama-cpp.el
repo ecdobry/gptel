@@ -203,19 +203,19 @@ multiple llama.cpp backends registered."
         (alist-get name llama-cpp-backends nil nil #'equal))))))
 
 ;; Transient menu integration
-(declare-function transient-define-suffix "transient")
 (defvar gptel-backend)
 
-(transient-define-suffix gptel-llama-cpp--suffix-refresh-models ()
-  "Refresh models from llama.cpp server."
-  :transient t
-  :key "R"
-  :if (lambda () (and (boundp 'gptel-backend)
-                      gptel-backend
-                      (gptel-llama-cpp-p gptel-backend)))
-  :description "Refresh models"
-  (interactive)
-  (gptel-llama-cpp-refresh-models gptel-backend))
+(with-eval-after-load 'transient
+  (transient-define-suffix gptel-llama-cpp--suffix-refresh-models ()
+    "Refresh models from llama.cpp server."
+    :transient t
+    :key "R"
+    :if (lambda () (and (boundp 'gptel-backend)
+                        gptel-backend
+                        (gptel-llama-cpp-p gptel-backend)))
+    :description "Refresh models"
+    (interactive)
+    (gptel-llama-cpp-refresh-models gptel-backend)))
 
 ;;;###autoload
 (cl-defun gptel-make-llama-cpp
