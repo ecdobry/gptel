@@ -1917,7 +1917,7 @@ This uses the prompts in the variable
           (gptel--set-with-scope
            'gptel--system-message prompt gptel--set-buffer-locally)
           (gptel--edit-directive 'gptel--system-message
-            :callback (lambda () (call-interactively #'gptel-menu)))))
+            :callback (lambda (_) (call-interactively #'gptel-menu)))))
     (message "No prompts available.")))
 
 (transient-define-suffix gptel--suffix-system-message (&optional cancel)
