@@ -922,6 +922,7 @@ MODE-SYM is typically a major-mode symbol."
      (skip-syntax-forward "w.")
      ,(macroexp-progn body)))
 
+;; NOTE: Remove after we drop Emacs 27.1 (#724)
 (defmacro gptel--temp-buffer (buf)
   "Generate a temp buffer BUF.
 
@@ -1837,8 +1838,8 @@ cases.
 
 The INFO plist has (at least) the following keys:
 :data         - The request data included with the query
-:position     - marker at the point the request was sent, unless
-                POSITION is specified.
+:position     - marker where the response will (nominally) be inserted.
+                Of course, the insertion is left to the CALLBACK.
 :buffer       - The buffer current when the request was sent,
                 unless BUFFER is specified.
 :status       - Short string describing the result of the request,
@@ -1965,8 +1966,8 @@ be used to rerun or continue the request at a later time."
          (gptel--schema schema)
          (prompt-buffer
           (cond                       ;prompt from buffer or explicitly supplied
-           ((null prompt)
-            (gptel--create-prompt-buffer (point)))
+           ((null prompt)           ;Send text up to end of word (for evil-mode users)
+            (gptel--create-prompt-buffer (gptel--at-word-end (point))))
            ((stringp prompt)
             (gptel--with-buffer-copy buffer nil nil
               (insert prompt)

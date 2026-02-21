@@ -86,8 +86,16 @@
      :capabilities (media tool-use json url)
      :mime-types ("image/jpeg" "image/png" "image/gif" "image/webp")
      :context-window 400
-     :input-cost 1.75
-     :output-cost 14
+     :input-cost 1
+     :output-cost 1
+     :cutoff-date "2025-08")
+    (gpt-5.2-codex
+     :description "The best model for coding and agentic tasks"
+     :capabilities (media tool-use json url)
+     :mime-types ("image/jpeg" "image/png" "image/gif" "image/webp")
+     :context-window 400
+     :input-cost 1
+     :output-cost 1
      :cutoff-date "2025-08")
     (claude-sonnet-4
      :description "High-performance model with exceptional reasoning and efficiency"
@@ -129,6 +137,14 @@
      :input-cost 3
      :output-cost 3
      :cutoff-date "2025-05")
+    (claude-opus-4.6
+     :description "Most capable model for complex reasoning and advanced coding"
+     :capabilities (media tool-use cache)
+     :mime-types ("image/jpeg" "image/png" "image/gif" "image/webp" "application/pdf")
+     :context-window 200
+     :input-cost 3
+     :output-cost 3
+     :cutoff-date "2025-08")
     (gemini-2.5-pro
      :description "Next gen, high speed, multimodal for a diverse variety of tasks"
      :capabilities (tool-use json media)
